@@ -13,10 +13,29 @@ import java.util.List;
 
 public class EditWindow extends JFrame {
     private final String filename;
-    private final List<JTextArea> lineEditors = new ArrayList<>();
+    private final List<LockableTextArea> lineEditors = new ArrayList<>();
     private final boolean[] isUpdating = new boolean[20];
     private final Set<Integer> lockedLines = new HashSet<>();
     private int currentFocusedLine = -1;
+
+    // 🔒 커서 이동 자체를 막기 위한 서브 클래스
+    static class LockableTextArea extends JTextArea {
+        private boolean locked = false;
+
+        public void setLocked(boolean locked) {
+            this.locked = locked;
+        }
+
+        @Override
+        public boolean isFocusable() {
+            return !locked;
+        }
+
+        @Override
+        public boolean requestFocusInWindow() {
+            return !locked && super.requestFocusInWindow();
+        }
+    }
 
     public EditWindow(String filename, String content) {
         this.filename = filename;
@@ -32,7 +51,7 @@ public class EditWindow extends JFrame {
         String[] lines = content != null ? content.split("\n", -1) : new String[0];
 
         for (int i = 0; i < 20; i++) {
-            JTextArea lineArea = new JTextArea();
+            LockableTextArea lineArea = new LockableTextArea();
             lineArea.setRows(1);
             lineArea.setLineWrap(false);
             lineArea.setWrapStyleWord(false);
@@ -64,40 +83,11 @@ public class EditWindow extends JFrame {
                 public void changedUpdate(DocumentEvent e) {}
             });
 
-            // 마우스 클릭 시 → lock 요청
-            lineArea.addMouseListener(new MouseAdapter() {
-                @Override
-                public void mousePressed(MouseEvent e) {
-                    if (lockedLines.contains(lineIndex) && lineIndex != currentFocusedLine) {
-                        // 현재 점유 중인 줄 외의 다른 점유 줄 클릭 시 → 커서 이동 차단
-                        e.consume();
-                        SwingUtilities.invokeLater(() -> {
-                            if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
-                                JTextArea prev = lineEditors.get(currentFocusedLine);
-                                prev.requestFocusInWindow();
-                                prev.setCaretPosition(prev.getText().length());
-                            }
-                        });
-                    }
-                }
-            });
-
-            // 포커스 이동 감지 → 서버에 lock 요청
+            // 포커스 감지 → 서버로 lock 요청
             lineArea.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusGained(FocusEvent e) {
-                    if (lockedLines.contains(lineIndex) && lineIndex != currentFocusedLine) {
-                        // 점유된 줄에 포커스 진입 시 → 커서 되돌리기
-                        SwingUtilities.invokeLater(() -> {
-                            if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
-                                lineEditors.get(currentFocusedLine).requestFocusInWindow();
-                                lineEditors.get(currentFocusedLine).setCaretPosition(
-                                        lineEditors.get(currentFocusedLine).getText().length()
-                                );
-                            }
-                        });
-                        return;
-                    }
+                    if (lockedLines.contains(lineIndex)) return;
 
                     if (currentFocusedLine != lineIndex) {
                         if (currentFocusedLine != -1) {
@@ -119,7 +109,7 @@ public class EditWindow extends JFrame {
                 }
             });
 
-            // 초기 값 설정
+            // 초기 값 세팅
             if (i < lines.length) {
                 isUpdating[i] = true;
                 lineArea.setText(lines[i]);
@@ -171,12 +161,15 @@ public class EditWindow extends JFrame {
             lockedLines.addAll(locked);
 
             for (int i = 0; i < 20; i++) {
+                LockableTextArea area = lineEditors.get(i);
                 if (locked.contains(i)) {
-                    lineEditors.get(i).setEditable(false);
-                    lineEditors.get(i).setForeground(Color.RED);
+                    area.setLocked(true);
+                    area.setEditable(false);
+                    area.setForeground(Color.RED);
                 } else {
-                    lineEditors.get(i).setEditable(true);
-                    lineEditors.get(i).setForeground(Color.BLACK);
+                    area.setLocked(false);
+                    area.setEditable(true);
+                    area.setForeground(Color.BLACK);
                 }
             }
         });
