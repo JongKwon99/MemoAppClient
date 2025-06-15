@@ -64,37 +64,36 @@ public class EditWindow extends JFrame {
                 public void changedUpdate(DocumentEvent e) {}
             });
 
-            // 클릭 차단
+            // 마우스 클릭 시 → lock 요청
             lineArea.addMouseListener(new MouseAdapter() {
                 @Override
                 public void mousePressed(MouseEvent e) {
-                    if (lockedLines.contains(lineIndex)) {
+                    if (lockedLines.contains(lineIndex) && lineIndex != currentFocusedLine) {
+                        // 현재 점유 중인 줄 외의 다른 점유 줄 클릭 시 → 커서 이동 차단
                         e.consume();
                         SwingUtilities.invokeLater(() -> {
                             if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
                                 JTextArea prev = lineEditors.get(currentFocusedLine);
                                 prev.requestFocusInWindow();
-                                prev.setCaretPosition(prev.getText().length());  // 끝으로 이동
-                            } else {
-                                JTextArea first = lineEditors.get(0);
-                                first.requestFocusInWindow();
-                                first.setCaretPosition(first.getText().length());
+                                prev.setCaretPosition(prev.getText().length());
                             }
                         });
                     }
                 }
             });
 
-            // 포커스 감지 → lock 요청
+            // 포커스 이동 감지 → 서버에 lock 요청
             lineArea.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusGained(FocusEvent e) {
-                    if (lockedLines.contains(lineIndex)) {
+                    if (lockedLines.contains(lineIndex) && lineIndex != currentFocusedLine) {
+                        // 점유된 줄에 포커스 진입 시 → 커서 되돌리기
                         SwingUtilities.invokeLater(() -> {
                             if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
                                 lineEditors.get(currentFocusedLine).requestFocusInWindow();
-                            } else {
-                                lineEditors.get(0).requestFocusInWindow();
+                                lineEditors.get(currentFocusedLine).setCaretPosition(
+                                        lineEditors.get(currentFocusedLine).getText().length()
+                                );
                             }
                         });
                         return;
@@ -120,7 +119,7 @@ public class EditWindow extends JFrame {
                 }
             });
 
-            // 초기 값 세팅
+            // 초기 값 설정
             if (i < lines.length) {
                 isUpdating[i] = true;
                 lineArea.setText(lines[i]);
