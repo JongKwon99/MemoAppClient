@@ -64,53 +64,60 @@ public class EditWindow extends JFrame {
                 public void changedUpdate(DocumentEvent e) {}
             });
 
-            // 포커스 감지 → 커서 이동 요청
-            lineArea.addFocusListener(new FocusAdapter() {
+            // 클릭 차단
+            lineArea.addMouseListener(new MouseAdapter() {
                 @Override
-                public void focusGained(FocusEvent e) {
+                public void mousePressed(MouseEvent e) {
                     if (lockedLines.contains(lineIndex)) {
-                        // 잠긴 줄이면 이동 못하게 하고, 포커스 복구
+                        e.consume();
+                        // 포커스를 현재 줄로 강제 이동
                         SwingUtilities.invokeLater(() -> {
                             if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
                                 lineEditors.get(currentFocusedLine).requestFocusInWindow();
                             } else {
-                                lineArea.transferFocus();  // 임의 이동
+                                lineEditors.get(0).requestFocusInWindow();
+                            }
+                        });
+                    }
+                }
+            });
+
+            // 포커스 감지 → lock 요청
+            lineArea.addFocusListener(new FocusAdapter() {
+                @Override
+                public void focusGained(FocusEvent e) {
+                    if (lockedLines.contains(lineIndex)) {
+                        SwingUtilities.invokeLater(() -> {
+                            if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
+                                lineEditors.get(currentFocusedLine).requestFocusInWindow();
+                            } else {
+                                lineEditors.get(0).requestFocusInWindow();
                             }
                         });
                         return;
                     }
 
                     if (currentFocusedLine != lineIndex) {
-                        currentFocusedLine = lineIndex;
+                        if (currentFocusedLine != -1) {
+                            JsonObject unlock = new JsonObject();
+                            unlock.addProperty("type", "unlock_request");
+                            unlock.addProperty("filename", filename);
+                            unlock.addProperty("line", currentFocusedLine);
+                            WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(unlock.toString());
+                        }
 
-                        JsonObject move = new JsonObject();
-                        move.addProperty("type", "cursor_move");
-                        move.addProperty("filename", filename);
-                        move.addProperty("line", lineIndex);
-                        WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(move.toString());
+                        JsonObject lock = new JsonObject();
+                        lock.addProperty("type", "lock_request");
+                        lock.addProperty("filename", filename);
+                        lock.addProperty("line", lineIndex);
+                        WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(lock.toString());
+
+                        currentFocusedLine = lineIndex;
                     }
                 }
             });
 
-            // 🔒 키 입력 차단
-            lineArea.addKeyListener(new KeyAdapter() {
-                @Override
-                public void keyTyped(KeyEvent e) {
-                    if (lockedLines.contains(lineIndex)) e.consume();
-                }
-
-                @Override
-                public void keyPressed(KeyEvent e) {
-                    if (lockedLines.contains(lineIndex)) e.consume();
-                }
-
-                @Override
-                public void keyReleased(KeyEvent e) {
-                    if (lockedLines.contains(lineIndex)) e.consume();
-                }
-            });
-
-            // 초기 텍스트 설정
+            // 초기 값 세팅
             if (i < lines.length) {
                 isUpdating[i] = true;
                 lineArea.setText(lines[i]);
@@ -132,16 +139,19 @@ public class EditWindow extends JFrame {
                 WebSocketClientEndpoint.removeEditor(filename);
                 if (currentFocusedLine != -1) {
                     JsonObject unlock = new JsonObject();
-                    unlock.addProperty("type", "cursor_move");
+                    unlock.addProperty("type", "unlock_request");
                     unlock.addProperty("filename", filename);
-                    unlock.addProperty("line", -1); // 해제 의미
-                    WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(unlock.toString());
+                    unlock.addProperty("line", currentFocusedLine);
+
+                    var session = WebSocketClientEndpoint.getSession();
+                    if (session != null && session.isOpen()) {
+                        session.getAsyncRemote().sendText(unlock.toString());
+                    }
                 }
             }
         });
     }
 
-    // 서버로부터 전체 내용 업데이트 시 사용
     public void updateContent(String newContent) {
         SwingUtilities.invokeLater(() -> {
             String[] lines = newContent != null ? newContent.split("\n", -1) : new String[0];
@@ -153,7 +163,6 @@ public class EditWindow extends JFrame {
         });
     }
 
-    // 서버로부터 받은 잠금 상태 반영
     public void updateLockedLines(Set<Integer> locked) {
         SwingUtilities.invokeLater(() -> {
             lockedLines.clear();
