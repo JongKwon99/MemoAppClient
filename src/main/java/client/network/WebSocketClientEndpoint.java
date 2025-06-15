@@ -1,5 +1,6 @@
 package client.network;
 
+import client.ui.EditWindow;
 import client.ui.MainWindow;
 import com.google.gson.*;
 
@@ -74,7 +75,15 @@ public class WebSocketClientEndpoint {
                     String content = json.get("content").getAsString();
 
                     SwingUtilities.invokeLater(() -> {
-                        new client.ui.EditWindow(filename, content);
+                        new EditWindow(filename, content);
+                    });
+
+                } else if (type.equals("file_update")) {
+                    String filename = json.get("filename").getAsString();
+                    String content = json.get("content").getAsString();
+
+                    SwingUtilities.invokeLater(() -> {
+                        EditWindow.updateContentFromServer(filename, content);
                     });
 
                 } else {
