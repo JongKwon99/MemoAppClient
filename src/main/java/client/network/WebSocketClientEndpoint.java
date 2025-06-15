@@ -62,7 +62,14 @@ public class WebSocketClientEndpoint {
                     mainWindow.updateFileList(fileNames);
                 });
 
-            } else if (type.equals("file_content")) {
+            } else if (type.equals("client_join")) {
+                String nick = json.get("nickname").getAsString();
+                System.out.printf("클라이언트 연결됨: %s%n", nick);
+            } else if (type.equals("client_leave")) {
+                String nick = json.get("nickname").getAsString();
+                System.out.printf("클라이언트 연결 끊김: %s%n", nick);
+            }
+            else if (type.equals("file_content")) {
                 String filename = json.get("filename").getAsString();
                 String content = json.get("content").getAsString();
 
