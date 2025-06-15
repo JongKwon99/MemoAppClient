@@ -70,12 +70,15 @@ public class EditWindow extends JFrame {
                 public void mousePressed(MouseEvent e) {
                     if (lockedLines.contains(lineIndex)) {
                         e.consume();
-                        // 포커스를 현재 줄로 강제 이동
                         SwingUtilities.invokeLater(() -> {
                             if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
-                                lineEditors.get(currentFocusedLine).requestFocusInWindow();
+                                JTextArea prev = lineEditors.get(currentFocusedLine);
+                                prev.requestFocusInWindow();
+                                prev.setCaretPosition(prev.getText().length());  // 끝으로 이동
                             } else {
-                                lineEditors.get(0).requestFocusInWindow();
+                                JTextArea first = lineEditors.get(0);
+                                first.requestFocusInWindow();
+                                first.setCaretPosition(first.getText().length());
                             }
                         });
                     }
