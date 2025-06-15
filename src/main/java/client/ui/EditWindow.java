@@ -68,39 +68,30 @@ public class EditWindow extends JFrame {
                 public void changedUpdate(DocumentEvent e) {}
             });
 
-            // 포커스 감지 → lock 요청
+            // 포커스 감지 → 커서 이동 메시지 전송
             lineArea.addFocusListener(new FocusAdapter() {
                 @Override
                 public void focusGained(FocusEvent e) {
                     if (lockedLines.contains(lineIndex)) {
-                        // 다른 사람이 점유한 줄 → 포커스 해제
+                        // 다른 클라이언트가 점유한 줄이면 이동하지 않음
                         SwingUtilities.invokeLater(() -> {
                             if (currentFocusedLine >= 0 && currentFocusedLine < 20) {
                                 lineEditors.get(currentFocusedLine).requestFocusInWindow();
                             } else {
-                                lineArea.transferFocus(); // 다른 줄도 없을 경우 아무 데나 넘김
+                                lineArea.transferFocus();
                             }
                         });
                         return;
                     }
 
-                    // 현재 줄이 내 것이 아닌 경우 → 서버에 lock 요청
                     if (currentFocusedLine != lineIndex) {
-                        if (currentFocusedLine != -1) {
-                            JsonObject unlock = new JsonObject();
-                            unlock.addProperty("type", "unlock_request");
-                            unlock.addProperty("filename", filename);
-                            unlock.addProperty("line", currentFocusedLine);
-                            WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(unlock.toString());
-                        }
+                        currentFocusedLine = lineIndex;
 
                         JsonObject lock = new JsonObject();
-                        lock.addProperty("type", "lock_request");
+                        lock.addProperty("type", "cursor_move");
                         lock.addProperty("filename", filename);
                         lock.addProperty("line", lineIndex);
                         WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(lock.toString());
-
-                        currentFocusedLine = lineIndex;
                     }
                 }
             });
@@ -124,21 +115,16 @@ public class EditWindow extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                WebSocketClientEndpoint.removeEditor(filename); // 단지 편집기 제거
+                WebSocketClientEndpoint.removeEditor(filename);
                 if (currentFocusedLine != -1) {
                     JsonObject unlock = new JsonObject();
-                    unlock.addProperty("type", "unlock_request");
+                    unlock.addProperty("type", "cursor_move");
                     unlock.addProperty("filename", filename);
-                    unlock.addProperty("line", currentFocusedLine);
-
-                    var session = WebSocketClientEndpoint.getSession();
-                    if (session != null && session.isOpen()) {
-                        session.getAsyncRemote().sendText(unlock.toString());
-                    }
+                    unlock.addProperty("line", -1); // 줄 없음 → 해제 의미
+                    WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(unlock.toString());
                 }
             }
         });
-
     }
 
     // 서버로부터 전체 내용 업데이트 시 사용
