@@ -9,11 +9,13 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.ArrayList;
+import java.util.List;
 
 public class EditWindow extends JFrame {
     private final String filename;
-    private JTextPane textPane;
-    private boolean isUpdating = false;
+    private final List<JTextArea> lineEditors = new ArrayList<>();
+    private final boolean[] isUpdating = new boolean[20]; // 20줄 대응
 
     public EditWindow(String filename, String content) {
         this.filename = filename;
@@ -23,32 +25,56 @@ public class EditWindow extends JFrame {
         setLocationRelativeTo(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
-        textPane = new JTextPane();
-        textPane.setText(content);
-        JScrollPane scrollPane = new JScrollPane(textPane);
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
 
+        String[] lines = content != null ? content.split("\n", -1) : new String[0];
+
+        for (int i = 0; i < 20; i++) {
+            JTextArea lineArea = new JTextArea();
+            lineArea.setRows(1);
+            lineArea.setLineWrap(false);
+            lineArea.setWrapStyleWord(false);
+            lineArea.setMaximumSize(new Dimension(Integer.MAX_VALUE, lineArea.getPreferredSize().height));
+            lineArea.setFocusTraversalKeysEnabled(false);
+
+            int lineIndex = i;
+            lineArea.getDocument().addDocumentListener(new DocumentListener() {
+                private void sendUpdate() {
+                    if (isUpdating[lineIndex]) return;
+
+                    StringBuilder updatedContent = new StringBuilder();
+                    for (int j = 0; j < 20; j++) {
+                        updatedContent.append(lineEditors.get(j).getText());
+                        if (j < 19) updatedContent.append("\n");
+                    }
+
+                    JsonObject msg = new JsonObject();
+                    msg.addProperty("type", "update_file");
+                    msg.addProperty("filename", filename);
+                    msg.addProperty("content", updatedContent.toString());
+                    WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(msg.toString());
+                }
+
+                public void insertUpdate(DocumentEvent e) { sendUpdate(); }
+                public void removeUpdate(DocumentEvent e) { sendUpdate(); }
+                public void changedUpdate(DocumentEvent e) {}
+            });
+
+            if (i < lines.length) {
+                isUpdating[i] = true;
+                lineArea.setText(lines[i]);
+                isUpdating[i] = false;
+            }
+
+            lineEditors.add(lineArea);
+            panel.add(lineArea);
+        }
+
+        JScrollPane scrollPane = new JScrollPane(panel);
         add(scrollPane, BorderLayout.CENTER);
         setVisible(true);
 
-        // ✅ 실시간 입력 동기화
-        textPane.getDocument().addDocumentListener(new DocumentListener() {
-            private void sendUpdate() {
-                if (isUpdating) return;
-
-                String updatedContent = textPane.getText();
-                JsonObject msg = new JsonObject();
-                msg.addProperty("type", "update_file");
-                msg.addProperty("filename", filename);
-                msg.addProperty("content", updatedContent);
-                WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(msg.toString());
-            }
-
-            public void insertUpdate(DocumentEvent e) { sendUpdate(); }
-            public void removeUpdate(DocumentEvent e) { sendUpdate(); }
-            public void changedUpdate(DocumentEvent e) {}
-        });
-
-        // ✅ 창이 닫힐 때 openEditors에서 제거
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
@@ -59,9 +85,24 @@ public class EditWindow extends JFrame {
 
     public void updateContent(String newContent) {
         SwingUtilities.invokeLater(() -> {
-            isUpdating = true;
-            textPane.setText(newContent);
-            isUpdating = false;
+            String[] lines = newContent != null ? newContent.split("\n", -1) : new String[0];
+            for (int i = 0; i < 20; i++) {
+                isUpdating[i] = true;
+                lineEditors.get(i).setText(i < lines.length ? lines[i] : "");
+                isUpdating[i] = false;
+            }
         });
+    }
+
+    public void setEditable(int line, boolean editable) {
+        if (line >= 0 && line < 20) {
+            lineEditors.get(line).setEditable(editable);
+        }
+    }
+
+    public void setLineColor(int line, Color color) {
+        if (line >= 0 && line < 20) {
+            lineEditors.get(line).setForeground(color);
+        }
     }
 }

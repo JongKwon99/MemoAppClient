@@ -11,8 +11,11 @@ public class MainWindow extends JFrame {
 
     private final DefaultListModel<String> listModel = new DefaultListModel<>();
     private final JList<String> fileList = new JList<>(listModel);
+    private final String nickname;
 
     public MainWindow(String nickname) {
+        this.nickname = nickname;
+
         setTitle("MemoApp - 파일 목록 (" + nickname + ")");
         setSize(400, 300);
         setDefaultCloseOperation(EXIT_ON_CLOSE);
@@ -24,7 +27,7 @@ public class MainWindow extends JFrame {
         JButton editButton = new JButton("편집");
         JButton deleteButton = new JButton("삭제");
 
-        // 추가
+        // 추가 버튼: 새 파일 생성
         addButton.addActionListener(e -> {
             String newFile = JOptionPane.showInputDialog(this, "새 파일 이름 입력:");
             if (newFile != null && !newFile.trim().isEmpty()) {
@@ -35,7 +38,7 @@ public class MainWindow extends JFrame {
             }
         });
 
-        // 편집
+        // 편집 버튼: 파일 열기 요청
         editButton.addActionListener(e -> {
             String selectedFile = fileList.getSelectedValue();
             if (selectedFile != null) {
@@ -46,7 +49,7 @@ public class MainWindow extends JFrame {
             }
         });
 
-        // 삭제
+        // 삭제 버튼: 파일 삭제 요청
         deleteButton.addActionListener(e -> {
             String selectedFile = fileList.getSelectedValue();
             if (selectedFile != null) {
