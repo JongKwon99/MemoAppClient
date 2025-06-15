@@ -82,7 +82,25 @@ public class WebSocketClientEndpoint {
                 if (editor != null) {
                     editor.updateContent(content);
                 }
+            } else if (type.equals("lock_state")) {
+                String filename = json.get("filename").getAsString();
+                JsonArray locks = json.getAsJsonArray("locks");
+
+                Set<Integer> locked = new HashSet<>();
+                for (JsonElement e : locks) {
+                    JsonObject obj = e.getAsJsonObject();
+                    int line = obj.get("line").getAsInt();
+                    String lockedBy = obj.get("lockedBy").getAsString();
+                    if (!lockedBy.equals(nickname)) {
+                        locked.add(line);
+                    }
+                }
+                EditWindow editor = openEditors.get(filename);
+                if (editor != null) {
+                    editor.updateLockedLines(locked);
+                }
             }
+
 
         } catch (Exception e) {
             System.err.println("메시지 처리 중 오류: " + e.getMessage());
