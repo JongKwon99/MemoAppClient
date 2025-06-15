@@ -26,7 +26,7 @@ public class WebSocketClientEndpoint {
             loginWindow = loginWin;
 
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
-            container.connectToServer(WebSocketClientEndpoint.class, new URI(serverUri + "?nickname=" + nickname));
+            container.connectToServer(WebSocketClientEndpoint.class, new URI(serverUri + "?clientId=" + nickname));
         } catch (Exception e) {
             System.err.println("접속 실패: " + e.getMessage());
             JOptionPane.showMessageDialog(loginWindow, "서버 접속 실패: " + e.getMessage());
@@ -67,12 +67,13 @@ public class WebSocketClientEndpoint {
                 String content = json.get("content").getAsString();
 
                 SwingUtilities.invokeLater(() -> {
-                    if (!openEditors.containsKey(filename)) {
+                    EditWindow existing = openEditors.get(filename);
+
+                    if (existing == null || !existing.isDisplayable()) {  // ✨ isDisplayable() 체크 추가!
                         EditWindow editor = new EditWindow(filename, content);
                         openEditors.put(filename, editor);
                     }
                 });
-
             } else if (type.equals("file_update_broadcast")) {
                 String filename = json.get("filename").getAsString();
                 String content = json.get("content").getAsString();

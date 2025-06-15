@@ -38,16 +38,28 @@ public class MainWindow extends JFrame {
             }
         });
 
-        // 편집 버튼: 파일 열기 요청
+        // 편집
         editButton.addActionListener(e -> {
             String selectedFile = fileList.getSelectedValue();
             if (selectedFile != null) {
-                JsonObject request = new JsonObject();
-                request.addProperty("type", "read_file");
-                request.addProperty("filename", selectedFile);
-                WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(request.toString());
+                try {
+                    if (WebSocketClientEndpoint.getSession() == null || !WebSocketClientEndpoint.getSession().isOpen()) {
+                        JOptionPane.showMessageDialog(this, "서버와의 연결이 종료되었습니다. 다시 실행해주세요.", "연결 끊김", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
+                    JsonObject request = new JsonObject();
+                    request.addProperty("type", "read_file");
+                    request.addProperty("filename", selectedFile);
+                    WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(request.toString());
+
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    JOptionPane.showMessageDialog(this, "파일 열기 중 오류 발생: " + ex.getMessage(), "오류", JOptionPane.ERROR_MESSAGE);
+                }
             }
         });
+
 
         // 삭제 버튼: 파일 삭제 요청
         deleteButton.addActionListener(e -> {
