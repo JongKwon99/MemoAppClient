@@ -7,8 +7,7 @@ import com.google.gson.*;
 import javax.swing.*;
 import javax.websocket.*;
 import java.net.URI;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @ClientEndpoint
 public class WebSocketClientEndpoint {
@@ -18,6 +17,9 @@ public class WebSocketClientEndpoint {
     private static JFrame loginWindow;
     private static String nickname;
 
+    // 열려 있는 편집창 목록
+    private static final Map<String, EditWindow> openEditors = new HashMap<>();
+
     public static void connect(String serverUri, String userNickname, JFrame loginWin) {
         try {
             nickname = userNickname;
@@ -25,7 +27,6 @@ public class WebSocketClientEndpoint {
 
             WebSocketContainer container = ContainerProvider.getWebSocketContainer();
             container.connectToServer(WebSocketClientEndpoint.class, new URI(serverUri + "?nickname=" + nickname));
-
         } catch (Exception e) {
             System.err.println("접속 실패: " + e.getMessage());
             JOptionPane.showMessageDialog(loginWindow, "서버 접속 실패: " + e.getMessage());
@@ -43,59 +44,54 @@ public class WebSocketClientEndpoint {
         System.out.println("서버 응답 수신: " + message);
 
         try {
-            JsonElement parsed = JsonParser.parseString(message);
-            if (!parsed.isJsonObject()) {
-                System.err.println("⚠️ 수신한 메시지가 JSON 객체가 아님: " + parsed);
-                return;
-            }
+            JsonObject json = JsonParser.parseString(message).getAsJsonObject();
+            String type = json.get("type").getAsString();
 
-            JsonObject json = parsed.getAsJsonObject();
-            JsonElement typeElement = json.get("type");
-
-            if (typeElement != null && typeElement.isJsonPrimitive() && typeElement.getAsJsonPrimitive().isString()) {
-                String type = typeElement.getAsString();
-
-                if (type.equals("file_list")) {
-                    JsonArray fileArray = json.getAsJsonArray("files");
-                    List<String> fileNames = new ArrayList<>();
-                    for (JsonElement elem : fileArray) {
-                        fileNames.add(elem.getAsString());
-                    }
-
-                    SwingUtilities.invokeLater(() -> {
-                        if (mainWindow == null) {
-                            loginWindow.dispose();
-                            mainWindow = new MainWindow(nickname);
-                        }
-                        mainWindow.updateFileList(fileNames);
-                    });
-
-                } else if (type.equals("file_content")) {
-                    String filename = json.get("filename").getAsString();
-                    String content = json.get("content").getAsString();
-
-                    SwingUtilities.invokeLater(() -> {
-                        new EditWindow(filename, content);
-                    });
-
-                } else if (type.equals("file_update")) {
-                    String filename = json.get("filename").getAsString();
-                    String content = json.get("content").getAsString();
-
-                    SwingUtilities.invokeLater(() -> {
-                        EditWindow.updateContentFromServer(filename, content);
-                    });
-
-                } else {
-                    System.err.println("⚠️ 알 수 없는 메시지 타입: " + type);
+            if (type.equals("file_list")) {
+                JsonArray fileArray = json.getAsJsonArray("files");
+                List<String> fileNames = new ArrayList<>();
+                for (JsonElement elem : fileArray) {
+                    fileNames.add(elem.getAsString());
                 }
-            } else {
-                System.err.println("⚠️ type 필드가 문자열이 아님: " + typeElement);
+
+                SwingUtilities.invokeLater(() -> {
+                    if (mainWindow == null) {
+                        loginWindow.dispose();
+                        mainWindow = new MainWindow(nickname);
+                    }
+                    mainWindow.updateFileList(fileNames);
+                });
+
+            } else if (type.equals("file_content")) {
+                String filename = json.get("filename").getAsString();
+                String content = json.get("content").getAsString();
+
+                SwingUtilities.invokeLater(() -> {
+                    if (!openEditors.containsKey(filename)) {
+                        EditWindow editor = new EditWindow(filename, content);
+                        openEditors.put(filename, editor);
+                    }
+                });
+
+            } else if (type.equals("file_update_broadcast")) {
+                String filename = json.get("filename").getAsString();
+                String content = json.get("content").getAsString();
+
+                EditWindow editor = openEditors.get(filename);
+                if (editor != null) {
+                    editor.updateContent(content);
+                }
             }
+
         } catch (Exception e) {
             System.err.println("메시지 처리 중 오류: " + e.getMessage());
             e.printStackTrace();
         }
+    }
+
+    @OnClose
+    public void onClose(Session session, CloseReason closeReason) {
+        System.out.println("연결 종료: " + closeReason.getReasonPhrase());
     }
 
     @OnError
@@ -104,12 +100,12 @@ public class WebSocketClientEndpoint {
         thr.printStackTrace();
     }
 
-    @OnClose
-    public void onClose(Session session, CloseReason closeReason) {
-        System.out.println("연결 종료: " + closeReason.getReasonPhrase());
-    }
-
     public static Session getSession() {
         return session;
     }
+
+    public static void removeEditor(String filename) {
+        openEditors.remove(filename);
+    }
+
 }

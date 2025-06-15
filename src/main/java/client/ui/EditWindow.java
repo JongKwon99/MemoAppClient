@@ -7,79 +7,61 @@ import javax.swing.*;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 
 public class EditWindow extends JFrame {
-
-    private static final Map<String, EditWindow> openWindows = new HashMap<>();
-    private String filename;
-    private JTextArea textArea;
-    private boolean internalUpdate = false;
+    private final String filename;
+    private JTextPane textPane;
+    private boolean isUpdating = false;
 
     public EditWindow(String filename, String content) {
         this.filename = filename;
 
-        // 이미 열린 창이 있다면 포커스만 주고 return
-        if (openWindows.containsKey(filename)) {
-            openWindows.get(filename).requestFocus();
-            return;
-        }
-        openWindows.put(filename, this);
-
-        setTitle("편집: " + filename);
+        setTitle(filename);
         setSize(600, 400);
         setLocationRelativeTo(null);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
 
-        textArea = new JTextArea(content);
-        JScrollPane scrollPane = new JScrollPane(textArea);
-
-        textArea.getDocument().addDocumentListener(new DocumentListener() {
-            private void sendUpdate() {
-                if (internalUpdate) return;
-
-                String updatedContent = textArea.getText();
-                JsonObject updateMessage = new JsonObject();
-                updateMessage.addProperty("type", "edit_content");
-                updateMessage.addProperty("filename", filename);
-                updateMessage.addProperty("content", updatedContent);
-
-                WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(updateMessage.toString());
-            }
-
-            @Override
-            public void insertUpdate(DocumentEvent e) {
-                sendUpdate();
-            }
-
-            @Override
-            public void removeUpdate(DocumentEvent e) {
-                sendUpdate();
-            }
-
-            @Override
-            public void changedUpdate(DocumentEvent e) {
-                sendUpdate();
-            }
-        });
+        textPane = new JTextPane();
+        textPane.setText(content);
+        JScrollPane scrollPane = new JScrollPane(textPane);
 
         add(scrollPane, BorderLayout.CENTER);
         setVisible(true);
+
+        // ✅ 실시간 입력 동기화
+        textPane.getDocument().addDocumentListener(new DocumentListener() {
+            private void sendUpdate() {
+                if (isUpdating) return;
+
+                String updatedContent = textPane.getText();
+                JsonObject msg = new JsonObject();
+                msg.addProperty("type", "update_file");
+                msg.addProperty("filename", filename);
+                msg.addProperty("content", updatedContent);
+                WebSocketClientEndpoint.getSession().getAsyncRemote().sendText(msg.toString());
+            }
+
+            public void insertUpdate(DocumentEvent e) { sendUpdate(); }
+            public void removeUpdate(DocumentEvent e) { sendUpdate(); }
+            public void changedUpdate(DocumentEvent e) {}
+        });
+
+        // ✅ 창이 닫힐 때 openEditors에서 제거
+        addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                WebSocketClientEndpoint.removeEditor(filename);
+            }
+        });
     }
 
-    public static void updateContentFromServer(String filename, String newContent) {
-        EditWindow window = openWindows.get(filename);
-        if (window != null) {
-            window.internalUpdate = true;
-            window.textArea.setText(newContent);
-            window.internalUpdate = false;
-        }
-    }
-
-    @Override
-    public void dispose() {
-        openWindows.remove(filename);
-        super.dispose();
+    public void updateContent(String newContent) {
+        SwingUtilities.invokeLater(() -> {
+            isUpdating = true;
+            textPane.setText(newContent);
+            isUpdating = false;
+        });
     }
 }
